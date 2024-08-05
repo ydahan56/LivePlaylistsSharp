@@ -41,12 +41,7 @@ namespace LivePlaylistsClone.Channels
 
         public void Execute()
         {
-            AsyncContext.Run(this.ExecuteAsync);
-        }
-
-        public async Task ExecuteAsync()
-        {
-            bool writeSuccess = await WriteChunkToFile(this._samplePath);
+            bool writeSuccess = AsyncContext.Run(async () => await WriteChunkToFile(this._samplePath));
 
             if (!writeSuccess)
             {
@@ -57,7 +52,7 @@ namespace LivePlaylistsClone.Channels
 
             var sb = new StringBuilder();
 
-            var apiResult = await this._provider.RecognizeSongByFile(this._samplePath);
+            var apiResult = AsyncContext.Run(async () => await this._provider.RecognizeSongByFile(this._samplePath));
 
             if (!apiResult.IsSuccess)
             {
@@ -76,7 +71,7 @@ namespace LivePlaylistsClone.Channels
 
             foreach (IPlaylist playlist in this._playlists)
             {
-                await playlist.AddTrackToPlaylistAsync(apiResult);
+                AsyncContext.Run(async () => await playlist.AddTrackToPlaylistAsync(apiResult));
             }
 
             sb = new StringBuilder();
@@ -89,9 +84,9 @@ namespace LivePlaylistsClone.Channels
             // Mechanism to wait the leftover in order to prevent
             // the detection of the same song in different offset
             // and a redundant call to the recognition api (reduce cost)
-            var timeLeftSpan = 
-                apiResult.Spotify is null ? 
-                TimeSpan.FromMinutes(4) : 
+            var timeLeftSpan =
+                apiResult.Spotify is null ?
+                TimeSpan.FromMinutes(4) :
                 apiResult.SegmentOffset;
 
             Console.WriteLine(timeLeftSpan.ToString("mm\\:ss"));
@@ -123,6 +118,7 @@ namespace LivePlaylistsClone.Channels
             catch (Exception ex)
             {
                 File.AppendAllText(this._logPath, ex.ToString());
+
                 return false;
             }
 
