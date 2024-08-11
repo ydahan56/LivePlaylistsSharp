@@ -2,9 +2,8 @@
 using LivePlaylistsClone.Contracts;
 using LivePlaylistsSharp.Contracts;
 using SpotifyAPI.Web;
-using System;
-using System.Formats.Asn1;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Threading.Tasks;
 
 namespace LivePlaylistsClone.Playlists
@@ -23,10 +22,18 @@ namespace LivePlaylistsClone.Playlists
             var config = SpotifyClientConfig
                 .CreateDefault()
                 .WithAuthenticator(
-                    new ClientCredentialsAuthenticator(
+                    new AuthorizationCodeAuthenticator(
                         Env.GetString("spotify_client_id"),
-                        Env.GetString("spotify_client_secret")
+                        Env.GetString("spotify_client_secret"),
+                        new AuthorizationCodeTokenResponse()
+                        {
+                            RefreshToken = Env.GetString("refresh_token")
+                        }
                     )
+                    //new ClientCredentialsAuthenticator(
+                    //    Env.GetString("spotify_client_id"),
+                    //    Env.GetString("spotify_client_secret")
+                    //)
                  );
 
             this._spotifyAPI = new SpotifyClient(config);
@@ -56,8 +63,8 @@ namespace LivePlaylistsClone.Playlists
             {
                 // remove the last track from the bottom of the playlist
                 await this.RemovePlaylistItems(
-                    _playlistId, 
-                    playlist.SnapshotId, 
+                    _playlistId,
+                    playlist.SnapshotId,
                     PLAYLIST_LIMIT - 1
                 );
             }
