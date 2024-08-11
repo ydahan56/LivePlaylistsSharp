@@ -1,7 +1,10 @@
-﻿using FluentScheduler;
+﻿using AudDSharp;
+using AudDSharp.Models;
+using DotNetEnv;
+using FluentScheduler;
 using LivePlaylistsClone.Common;
 using LivePlaylistsClone.Contracts;
-using LivePlaylistsClone.Contracts.Providers;
+using LivePlaylistsSharp.Models;
 using Nito.AsyncEx;
 using System;
 using System.IO;
@@ -14,7 +17,7 @@ namespace LivePlaylistsClone.Channels
 {
     public class Channel : Registry, IJob
     {
-        private readonly IMusicProvider _provider;
+        private readonly AudDClient _auddio;
         private readonly IChannel _channel;
         private readonly IPlaylist[] _playlists;
 
@@ -26,6 +29,15 @@ namespace LivePlaylistsClone.Channels
 
         public Channel(IChannel channel, IPlaylist[] playlists)
         {
+            this._auddio = AudDClient
+                .Create(
+                    Env.GetString("audd_api_token")
+                )
+                .IncludeProvider(StreamProvider.Spotify)
+                .IncludeProvider(StreamProvider.Apple_Music)
+                .Build();
+
+
             this._channel = channel;
             this._playlists = playlists;
 
@@ -41,63 +53,77 @@ namespace LivePlaylistsClone.Channels
 
         public void Execute()
         {
-            bool writeSuccess = AsyncContext.Run(async () => await WriteChunkToFile(this._samplePath));
+            bool isSampleWritten = AsyncContext.Run(async () => await WriteChunkToFile(this._samplePath));
 
-            if (!writeSuccess)
+            if (!isSampleWritten)
             {
-                // Failed to write chunk to file,
-                // so we exit and wait for next execution
+                // fail to write chunk to disk, so we exit and wait for next execution
+
                 return;
             }
 
-            var sb = new StringBuilder();
+            var auddResp = this._auddio.RecognizeByFile(this._samplePath);
+            var auddTrack = new AudDTrack(auddResp);
 
-            var apiResult = AsyncContext.Run(async () => await this._provider.RecognizeSongByFile(this._samplePath));
-
-            if (!apiResult.IsSuccess)
+            if (!auddTrack.Success)
             {
                 /*
                  if we got here, it means there wasn't any song playing because:
-                 traffic highlights, breaking news, or some talk show, or..
+                 traffic highlights, breaking news, some talk show, or..
                  there's no recognition id for the current song (rare)
                 */
 
-                sb.AppendLine($"{DateTime.Now}");
-                sb.AppendLine(apiResult.ToString());
+                // prepare error text
+                var error = new StringBuilder();
+                error.AppendLine($"{DateTime.Now}");
+                error.AppendLine(auddTrack.ToString());
 
-                File.AppendAllText(this._logPath, sb.ToString());
+                // print error to disk
+                File.AppendAllText(this._logPath, error.ToString());
+
                 return;
             }
 
             foreach (IPlaylist playlist in this._playlists)
             {
-                AsyncContext.Run(async () => await playlist.AddTrackToPlaylistAsync(apiResult));
+                AsyncContext.Run(async () =>
+                {
+                    await playlist.AddTrackToPlaylistAsync(auddTrack);
+                });
             }
 
-            sb = new StringBuilder();
-            sb.AppendLine(this._channel.Name);
-            sb.AppendLine(apiResult.ToString());
+            var success = new StringBuilder();
+            success.AppendLine(this._channel.Name);
+            success.AppendLine(auddTrack.ToString());
 
-            Console.WriteLine(sb.ToString());
-            File.AppendAllText(this._logPath, sb.ToString());
+            // print track to console
+            Console.WriteLine(success.ToString());
+
+            // print track to file
+            File.AppendAllText(this._logPath, success.ToString());
 
             // Mechanism to wait the leftover in order to prevent
             // the detection of the same song in different offset
             // and a redundant call to the recognition api (reduce cost)
-            var timeLeftSpan =
-                apiResult.Spotify is null ?
-                TimeSpan.FromMinutes(4) :
-                apiResult.SegmentOffset;
+            var tsRemainder = this.GetNextTrackRemainder(auddTrack);
 
-            Console.WriteLine(timeLeftSpan.ToString("mm\\:ss"));
+            // print remainder
+            Console.WriteLine(tsRemainder.ToString("mm\\:ss"));
 
             // we call Duration() to convert the TimeSpan to absolute value
-            TimeSpan tsWait = timeLeftSpan.Subtract(apiResult.SegmentOffset).Duration();
+            TimeSpan tsWait = tsRemainder.Subtract(auddTrack.SegmentOffset).Duration();
             if (tsWait.Ticks > 0)
             {
                 Console.WriteLine(tsWait.ToString("mm\\:ss"));
                 Thread.Sleep(tsWait);
             }
+        }
+
+        private TimeSpan GetNextTrackRemainder(AudDTrack track)
+        {
+            return string.IsNullOrWhiteSpace(track.ProviderUri) ? 
+                TimeSpan.FromMinutes(4) : 
+                track.SegmentOffset;
         }
 
         // This method saves a 128KB chunk of the steam to a local file

@@ -1,8 +1,9 @@
 ﻿using DotNetEnv;
 using LivePlaylistsClone.Contracts;
-using LivePlaylistsClone.Contracts.Providers;
+using LivePlaylistsSharp.Contracts;
 using SpotifyAPI.Web;
 using System;
+using System.Formats.Asn1;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -10,7 +11,7 @@ namespace LivePlaylistsClone.Playlists
 {
     public class SpotifyPlaylist : IPlaylist
     {
-        private const int PLAYLIST_LIMIT = 100;
+        private const int PLAYLIST_LIMIT = 300;
 
         private readonly string _playlistId;
         private readonly SpotifyClient _spotifyAPI;
@@ -31,32 +32,20 @@ namespace LivePlaylistsClone.Playlists
             this._spotifyAPI = new SpotifyClient(config);
         }
 
-        public async Task AddTrackToPlaylistAsync(IMusicResult result)
+        public async Task AddTrackToPlaylistAsync(IPlaylistTrack track)
         {
-            try
-            {
-                await this.DoAddTrackToPlaylistAsync(result);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-        }
+            string spotifyUri = track.ProviderUri;
 
-        private async Task DoAddTrackToPlaylistAsync(IMusicResult result)
-        {
-            var uri = result.Spotify.Uri;
-
-            if (string.IsNullOrWhiteSpace(uri))
+            if (string.IsNullOrWhiteSpace(spotifyUri))
             {
                 var searchRequest = new SearchRequest(
-                    SearchRequest.Types.Track, $"{result.Artist} {result.Title}"
+                    SearchRequest.Types.Track, $"{track.Artist} {track.Title}"
                 );
 
                 var search = await _spotifyAPI.Search.Item(searchRequest);
                 var item = search.Tracks.Items.First();
 
-                uri = item.Uri;
+                spotifyUri = item.Uri;
             }
 
             // read playlist
@@ -66,11 +55,15 @@ namespace LivePlaylistsClone.Playlists
             if (this.PlaylistReachedLimit(playlist.Tracks.Items.Count))
             {
                 // remove the last track from the bottom of the playlist
-                await this.RemovePlaylistItems(_playlistId, playlist.SnapshotId, 99);
+                await this.RemovePlaylistItems(
+                    _playlistId, 
+                    playlist.SnapshotId, 
+                    PLAYLIST_LIMIT - 1
+                );
             }
 
             // add the captured track to the top of the playlist
-            await this.AddPlaylistItems(this._playlistId, 0, uri);
+            await this.AddPlaylistItems(this._playlistId, 0, spotifyUri);
         }
 
         private bool PlaylistReachedLimit(int count)
