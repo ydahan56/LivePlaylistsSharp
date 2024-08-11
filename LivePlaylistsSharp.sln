@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.4.33110.190
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LivePlaylistsSharp", "LivePlaylistsSharp\LivePlaylistsSharp.csproj", "{466142D9-288A-4E2F-AD16-76EE64579C41}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Agent", "Agent\Agent.csproj", "{466142D9-288A-4E2F-AD16-76EE64579C41}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AudDSharp", "..\AudDSharp\AudDSharp\AudDSharp.csproj", "{A4FA96A7-F7B2-4232-9C7E-9DA7710D405C}"
 EndProject
