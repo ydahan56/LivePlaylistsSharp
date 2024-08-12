@@ -36,6 +36,10 @@ namespace LivePlaylistsClone.Channels
             // init pcmanager
             this._pcMgr = new PCManager(channel.Name);
 
+            // inject classes
+            this._channel = channel;
+            this._playlists = playlists;
+
             // init audd.io
             this._auddio = AudDClient
                 .Create(
@@ -50,20 +54,17 @@ namespace LivePlaylistsClone.Channels
                 new LocalStorageConfiguration()
                 {
 
-                    Filename = this._pcMgr.CombineChannel($".{channel.Name}")
+                    Filename = this._pcMgr.ChannelStoragePath
                 }
             );
 
-            // injected classes
-            this._channel = channel;
-            this._playlists = playlists;
-
             // prepare settings
-            this._logPath = this._pcMgr.CombineChannel("log.txt");
-            this._samplePath = this._pcMgr.CombineChannel("sample.mp3");
+            this._logPath = this._pcMgr.ChannelLogsPath;
+            this._samplePath = this._pcMgr.ChannelSamplePath;
 
-            // schedules
-            this.Schedule(this).NonReentrant().ToRunNow().AndEvery(30).Seconds();
+            // monitor the channel every 4 minutes and 48 seconds,
+            // to reduce the api rate limit and cost to be identical to "stream" api
+            this.Schedule(this).NonReentrant().ToRunNow().AndEvery(288).Seconds();
         }
 
         public void Execute()
