@@ -12,7 +12,8 @@ namespace LivePlaylistsClone.Playlists
 {
     public class SpotifyPlaylist : IPlaylist
     {
-        private const int PLAYLIST_LIMIT = 300;
+        private const int PLAYLIST_TRACKS_LIMIT = 300;
+        private const int PLAYLIST_INSERT_OFFSET = 0;
 
         private readonly string _playlistId;
         private readonly SpotifyClient _spotifyAPI;
@@ -60,7 +61,16 @@ namespace LivePlaylistsClone.Playlists
             // read playlist
             var playlist = AsyncContext.Run(async () => await _spotifyAPI.Playlists.Get(_playlistId));
 
-            // if the playlist contains 100 items or above
+            // add the captured track to the top of the playlist
+            AsyncContext.Run(async () => 
+                await this.AddPlaylistItems(
+                    this._playlistId, 
+                    PLAYLIST_INSERT_OFFSET, 
+                    spotifyUri
+                )
+            );
+
+            // if the playlist reached the limit, then remove older tracks
             if (this.PlaylistReachedLimit(playlist.Tracks.Total.Value, out int[] indexes))
             {
                 // remove the last track from the bottom of the playlist
@@ -73,9 +83,6 @@ namespace LivePlaylistsClone.Playlists
                 );
             }
 
-            // add the captured track to the top of the playlist
-            AsyncContext.Run(async () => await this.AddPlaylistItems(this._playlistId, 0, spotifyUri));
-
             // we're done
             return Task.CompletedTask;
         }
@@ -84,16 +91,16 @@ namespace LivePlaylistsClone.Playlists
         {
             itemsIndex = Array.Empty<int>();
 
-            var ret = count >= PLAYLIST_LIMIT;
+            var ret = count >= PLAYLIST_TRACKS_LIMIT;
 
             if (ret)
             {
-                var indexCount = count - PLAYLIST_LIMIT;
+                var indexCount = count - PLAYLIST_TRACKS_LIMIT;
                 itemsIndex = new int[indexCount];
                 
                 for ( var i = 0; i < indexCount; i++ )
                 {
-                    itemsIndex[i] = PLAYLIST_LIMIT + i;
+                    itemsIndex[i] = PLAYLIST_TRACKS_LIMIT + i;
                 }
             }
 

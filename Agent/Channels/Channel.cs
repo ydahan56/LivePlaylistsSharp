@@ -102,10 +102,7 @@ namespace LivePlaylistsClone.Channels
 
             foreach (IPlaylist playlist in this._playlists)
             {
-                AsyncContext.Run(async () =>
-                {
-                    await playlist.AddTrackToPlaylistAsync(track);
-                });
+                AsyncContext.Run(async () => await playlist.AddTrackToPlaylistAsync(track));
             }
 
             // save to database
