@@ -13,6 +13,8 @@ namespace LivePlaylistsClone.Playlists
     public class SpotifyPlaylist : IPlaylist
     {
         private const int PLAYLIST_TRACKS_LIMIT = 300;
+
+        private const int PLAYLIST_ENDING_OFFSET = PLAYLIST_TRACKS_LIMIT - 1;
         private const int PLAYLIST_INSERT_OFFSET = 0;
 
         private readonly string _playlistId;
@@ -61,15 +63,6 @@ namespace LivePlaylistsClone.Playlists
             // read playlist
             var playlist = AsyncContext.Run(async () => await _spotifyAPI.Playlists.Get(_playlistId));
 
-            // add the captured track to the top of the playlist
-            AsyncContext.Run(async () => 
-                await this.AddPlaylistItems(
-                    this._playlistId, 
-                    PLAYLIST_INSERT_OFFSET, 
-                    spotifyUri
-                )
-            );
-
             // if the playlist reached the limit, then remove older tracks
             if (this.PlaylistReachedLimit(playlist.Tracks.Total.Value, out int[] indexes))
             {
@@ -83,6 +76,15 @@ namespace LivePlaylistsClone.Playlists
                 );
             }
 
+            // add the captured track to the top of the playlist
+            AsyncContext.Run(async () =>
+                await this.AddPlaylistItems(
+                    this._playlistId,
+                    PLAYLIST_INSERT_OFFSET,
+                    spotifyUri
+                )
+            );
+
             // we're done
             return Task.CompletedTask;
         }
@@ -95,12 +97,19 @@ namespace LivePlaylistsClone.Playlists
 
             if (ret)
             {
-                var indexCount = count - PLAYLIST_TRACKS_LIMIT;
+                // how many items we're going to remove
+                var indexCount = count - PLAYLIST_ENDING_OFFSET;
+
+                // create the array
                 itemsIndex = new int[indexCount];
                 
-                for ( var i = 0; i < indexCount; i++ )
+                // insert items index
+                for(
+                    int i = 0, itemIdx = PLAYLIST_ENDING_OFFSET; 
+                    i < indexCount;
+                    i++, itemIdx++)
                 {
-                    itemsIndex[i] = PLAYLIST_TRACKS_LIMIT + i;
+                    itemsIndex[i] = itemIdx;
                 }
             }
 
