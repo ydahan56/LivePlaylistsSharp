@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Agent", "Agent\Agent.csproj
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AudDSharp", "..\AudDSharp\AudDSharp\AudDSharp.csproj", "{A4FA96A7-F7B2-4232-9C7E-9DA7710D405C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShazamSharp", "ShazamSharp\ShazamSharp.csproj", "{597112D2-EBD3-4ACC-9BD2-E5C637750C73}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{A4FA96A7-F7B2-4232-9C7E-9DA7710D405C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A4FA96A7-F7B2-4232-9C7E-9DA7710D405C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A4FA96A7-F7B2-4232-9C7E-9DA7710D405C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{597112D2-EBD3-4ACC-9BD2-E5C637750C73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{597112D2-EBD3-4ACC-9BD2-E5C637750C73}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{597112D2-EBD3-4ACC-9BD2-E5C637750C73}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{597112D2-EBD3-4ACC-9BD2-E5C637750C73}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
