@@ -7,6 +7,10 @@ namespace LivePlaylistsSharp.Contracts
         string Title { get; }
         string Artist { get; }
         string ProviderUri { get; }
-        TimeSpan SegmentOffset { get; }
+        TimeSpan TotalTime { get; }
+        TimeSpan OffsetTime { get; }
+
+        bool Success { get; }
+        public TimeSpan RetryTimeSpan { get; }
     }
 }

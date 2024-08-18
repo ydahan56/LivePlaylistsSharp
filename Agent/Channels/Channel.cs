@@ -1,14 +1,19 @@
 ﻿using Agent.Extensions;
+using Agent.Loggers;
 using AudDSharp;
 using DotNetEnv;
 using FluentScheduler;
 using Hanssens.Net;
 using LivePlaylistsClone.Common;
 using LivePlaylistsClone.Contracts;
+using LivePlaylistsSharp.Contracts;
 using LivePlaylistsSharp.Models;
 using Nito.AsyncEx;
+using Polly;
+using ShazamSharp;
 using System;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -18,7 +23,10 @@ namespace LivePlaylistsClone.Channels
 {
     public class Channel : Registry, IJob
     {
-        private readonly AudDClient _auddio;
+        // music providers
+        private readonly AudDClient _auddioAPI;
+        private readonly ShazamClient _shazamAPI;
+
         private readonly ILocalStorage _storage;
         private readonly IChannel _channel;
         private readonly IPlaylist[] _playlists;
@@ -40,13 +48,18 @@ namespace LivePlaylistsClone.Channels
             this._channel = channel;
             this._playlists = playlists;
 
-            // init audd.io
-            this._auddio = AudDClient
+            // create auddio interface
+            this._auddioAPI = AudDClient
                 .Create(
                     Env.GetString("audd_api_token")
                 )
                 .IncludeProvider(StreamProvider.Apple_Music)
                 .IncludeProvider(StreamProvider.Spotify)
+                .Build();
+
+            // create shazam interface
+            this._shazamAPI = ShazamClient
+                .Create()
                 .Build();
 
             // setup local storage
@@ -78,9 +91,54 @@ namespace LivePlaylistsClone.Channels
                 return;
             }
 
-            var track = this._auddio
-                .RecognizeByFile(this._samplePath)
-                .ToTrack();
+            var auddioFallback = Policy<IPlaylistTrack>
+                .HandleResult(track => !track.Success)
+                .Fallback(() =>
+                {
+                    // This will be executed if the shazamAPI fails
+                    Console.WriteLine("Fallback to AudD Music");
+
+                    var tack = this._auddioAPI
+                        .RecognizeByFile(this._samplePath)
+                        .ToTrack();
+
+                    // if Shazam fails, we get result from auddio
+                    return tack;
+                });
+
+            var track = auddioFallback.Execute(() =>
+            {
+                // First try to recognize with shazamAPI
+                var track = Policy
+
+                    // if we didn't find a track
+                    .HandleResult<IPlaylistTrack>(track => !track.Success)
+
+                    // or if we're out of retries
+                    .OrResult(track => track.RetryTimeSpan != TimeSpan.Zero)
+
+                    // we wait until one of the above conditions is satisfied..
+                    .WaitAndRetry(
+                        retryCount: int.MaxValue, 
+                        sleepDurationProvider: (retryAttempt, track, context) => {
+
+                            // default api wait time
+                            return TimeSpan.FromSeconds(3);
+                    })
+
+                    // execute the retry policy
+                    .Execute(() => {
+                        // get track
+                        var track = this._shazamAPI
+                            .RecognizeByFile(this._samplePath)
+                            .ToTrack();
+
+                        // return
+                        return track;
+                    });
+
+                return track;
+            });
 
             if (!track.Success)
             {
@@ -122,31 +180,23 @@ namespace LivePlaylistsClone.Channels
             // Mechanism to wait the leftover in order to prevent
             // the detection of the same song in different offset
             // and a redundant call to the recognition api (reduce cost)
-            var tsRemainder = this.GetNextTrackRemainder(track);
+            var tsEndGap = this.GetTrackTimeEndGap(track);
 
-            // print remainder
-            this.PrintLog(tsRemainder.ToString("mm\\:ss"));
-
-            // we call Duration() to convert the TimeSpan to absolute value
-            var tsWait = tsRemainder
-                .Subtract(track.SegmentOffset)
-                .Duration();
-
-            if (tsWait.Ticks > 0)
+            if (tsEndGap.Ticks > 0)
             {
-                var printMe = $"Next execution in... {tsWait.ToString("mm\\:ss")} minutes";
+                var printMe = $"Next execution in... {tsEndGap.ToString("mm\\:ss")} minutes..";
 
                 this.PrintLog(printMe);
 
-                Thread.Sleep(tsWait);
+                Thread.Sleep(tsEndGap);
             }
         }
 
-        private bool TrackExistInStorage(AudDTrack track)
+        private bool TrackExistInStorage(IPlaylistTrack track)
         {
             if (this._storage.Exists(LAST_TRACK_KEY))
             {
-                var cache_track = this._storage.Get<AudDTrack>(LAST_TRACK_KEY);
+                var cache_track = this._storage.Get<IPlaylistTrack>(LAST_TRACK_KEY);
 
                 return track.Equals(cache_track);
             }
@@ -154,11 +204,16 @@ namespace LivePlaylistsClone.Channels
             return false;
         }
 
-        private TimeSpan GetNextTrackRemainder(AudDTrack track)
+        private TimeSpan GetTrackTimeEndGap(IPlaylistTrack track)
         {
-            return string.IsNullOrWhiteSpace(track.ProviderUri) ?
-                TimeSpan.FromMinutes(4) :
-                track.SegmentOffset;
+            if (track.TotalTime == TimeSpan.Zero)
+            {
+                return TimeSpan
+                    .FromMilliseconds(210000)
+                    .Subtract(track.OffsetTime);
+            }
+
+            return track.TotalTime.Subtract(track.OffsetTime);
         }
 
         private void WriteLog(string message)

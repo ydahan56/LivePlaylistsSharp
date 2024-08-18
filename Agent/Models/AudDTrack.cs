@@ -9,12 +9,15 @@ namespace LivePlaylistsSharp.Models
 {
     public class AudDTrack : IPlaylistTrack, IEquatable<IPlaylistTrack>
     {
-        public string Title { get; set; }
-        public string Artist { get; set; }
-        public string ProviderUri { get; set; }
-        public TimeSpan SegmentOffset { get; set; }
+        public string Title { get; private set; }
+        public string Artist { get; private set; }
+        public string ProviderUri { get; private set; }
+        public TimeSpan TotalTime { get; private set; }
+        public TimeSpan OffsetTime { get; private set; }
 
         public bool Success { get; set; }
+
+        public TimeSpan RetryTimeSpan { get; private set; }
 
         // default ctor for local storage
         public AudDTrack()
@@ -44,8 +47,13 @@ namespace LivePlaylistsSharp.Models
             this.Title = result.result.title;
             this.Artist = result.result.artist;
             this.ProviderUri = result.result.spotify?.uri;
+
+            this.TotalTime = TimeSpan
+                .FromMilliseconds(
+                    result.result.spotify.duration_ms
+            );
            
-            this.SegmentOffset = TimeSpan.ParseExact(
+            this.OffsetTime = TimeSpan.ParseExact(
                 result.result.timecode,
                 "mm\\:ss",
                 CultureInfo.InvariantCulture

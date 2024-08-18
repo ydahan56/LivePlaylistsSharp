@@ -7,6 +7,15 @@ using System.Diagnostics;
 
 Env.Load();
 
+#if DEBUG
+JobManager.Initialize(
+    new Channel(
+        new GlglzChannel(), [
+            new SpotifyPlaylist("3zscpk0xnUckJs9BXoRwWX")
+        ]
+    )
+);
+#elif RELEASE
 JobManager.Initialize(
     new Channel(
         new GlglzChannel(), [
@@ -19,6 +28,7 @@ JobManager.Initialize(
         ]
     )
 );
+#endif
 
 // get current instance
 var instance = Process.GetCurrentProcess();

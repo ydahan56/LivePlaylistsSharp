@@ -16,12 +16,14 @@
     <PackageReference Include="LocalStorage" Version="2.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Nito.AsyncEx.Context" Version="5.1.2" />
+    <PackageReference Include="Polly" Version="8.4.1" />
     <PackageReference Include="SpotifyAPI.Web" Version="7.1.1" />
     <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.1.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\AudDSharp\AudDSharp\AudDSharp.csproj" />
+    <ProjectReference Include="..\ShazamSharp\ShazamSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
