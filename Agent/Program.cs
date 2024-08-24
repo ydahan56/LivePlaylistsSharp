@@ -1,4 +1,5 @@
-﻿using DotNetEnv;
+﻿using Agent.Strategies;
+using DotNetEnv;
 using FluentScheduler;
 using LivePlaylistsClone.Channels;
 using LivePlaylistsClone.Playlists;
@@ -10,7 +11,12 @@ Env.Load();
 #if DEBUG
 JobManager.Initialize(
     new Channel(
-        new GlglzChannel(), [
+        new GlglzChannel(), 
+        [
+            new ShazamStrategy(),
+            new AudDStrategy()
+        ],
+        [
             new SpotifyPlaylist("3zscpk0xnUckJs9BXoRwWX")
         ]
     )

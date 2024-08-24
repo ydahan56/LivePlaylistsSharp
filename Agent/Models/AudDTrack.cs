@@ -1,4 +1,5 @@
 ﻿using AudDSharp.Models;
+using Hanssens.Net;
 using LivePlaylistsSharp.Contracts;
 using System;
 using System.Collections.Generic;
@@ -7,27 +8,16 @@ using System.Text;
 
 namespace LivePlaylistsSharp.Models
 {
-    public class AudDTrack : IPlaylistTrack, IEquatable<IPlaylistTrack>
+    public class AudDTrack : IPlaylistTrack
     {
-        public string Title { get; private set; }
-        public string Artist { get; private set; }
-        public string ProviderUri { get; private set; }
-        public TimeSpan TotalTime { get; private set; }
-        public TimeSpan OffsetTime { get; private set; }
-
-        public bool Success { get; set; }
-
-        public TimeSpan RetryTimeSpan { get; private set; }
-
-        // default ctor for local storage
-        public AudDTrack()
+        public AudDTrack() // default ctor for local storage
         {
             
         }
 
         public AudDTrack(AudDResult result)
         {
-            this.Success = result.status.Contains("success");
+            this.Success = result == null ? false : result.status.Contains("success");
 
             if (!this.Success)
             {
@@ -36,17 +26,9 @@ namespace LivePlaylistsSharp.Models
                 return;
             }
 
-            if (result.result == null)
-            {
-                // Broadcast, breaking news, traffic, etc...
-                this.Success = false;
-
-                return;
-            }
-
             this.Title = result.result.title;
             this.Artist = result.result.artist;
-            this.ProviderUri = result.result.spotify?.uri;
+            this.SpotifyUri = result.result.spotify?.uri;
 
             this.TotalTime = TimeSpan
                 .FromMilliseconds(
@@ -58,21 +40,16 @@ namespace LivePlaylistsSharp.Models
                 "mm\\:ss",
                 CultureInfo.InvariantCulture
             );
+
+            this.SmartWaitEnabled = true;
         }
 
-        public override string ToString()
+        public override IPlaylistTrack GetStorageTrack(
+            ILocalStorage storage,
+            string itemKey
+            )
         {
-            var sb = new StringBuilder();
-
-            sb.AppendLine($"Title: {this.Title}");
-            sb.AppendLine($"Artist: {this.Artist}");
-            sb.AppendLine($"Uri: {this.ProviderUri}");
-
-            return sb.ToString();
-        }
-        public bool Equals(IPlaylistTrack other)
-        {
-            return this.ProviderUri.Equals(other.ProviderUri);
+            return storage.Get<AudDTrack>(itemKey);
         }
     }
 }

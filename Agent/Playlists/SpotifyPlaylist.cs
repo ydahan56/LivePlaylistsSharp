@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace LivePlaylistsClone.Playlists
 {
-    public class SpotifyPlaylist : IPlaylist
+    public class SpotifyPlaylist : IPlaylistStrategy
     {
         private const int PLAYLIST_TRACKS_LIMIT = 300;
 
@@ -46,7 +46,7 @@ namespace LivePlaylistsClone.Playlists
 
         public Task AddTrackToPlaylistAsync(IPlaylistTrack track)
         {
-            string spotifyUri = track.ProviderUri;
+            string spotifyUri = track.SpotifyUri;
 
             if (string.IsNullOrWhiteSpace(spotifyUri))
             {

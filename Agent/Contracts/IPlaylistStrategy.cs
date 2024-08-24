@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace LivePlaylistsClone.Contracts
 {
-    public interface IPlaylist
+    public interface IPlaylistStrategy
     {
         Task AddTrackToPlaylistAsync(IPlaylistTrack track);
     }

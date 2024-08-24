@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Agent.Utilities;
+using LivePlaylistsClone;
+using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -31,14 +34,42 @@ namespace Agent.Loggers
             }
         }
 
+        private readonly string _logsPath;
+        private readonly List<Action<string>> _loggers;
+
+        private Logger()
+        {
+            var commonUtilities = new CommonUtilities();
+
+            this._logsPath = commonUtilities.CombineRoot("logs.txt");
+            this._loggers = new List<Action<string>>()
+            {
+                this.FileLogger,
+                this.ConsoleLogger
+            };
+        }
+
         private readonly object _writeLock = new object();
 
         public void WriteLog(string message)
         {
             lock (this._writeLock)
             {
-                System.IO.File.AppendAllText(message, Environment.NewLine);
+                foreach (var logger in this._loggers)
+                {
+                    logger(message);
+                }
             }
+        }
+
+        private void FileLogger(string message)
+        {
+            System.IO.File.AppendAllText(this._logsPath, message + "\n");
+        }
+
+        private void ConsoleLogger(string message)
+        {
+            Console.WriteLine(message);
         }
     }
 }

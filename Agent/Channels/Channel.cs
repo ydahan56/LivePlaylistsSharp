@@ -1,17 +1,21 @@
-﻿using Agent.Extensions;
+﻿using Agent.Contracts;
+using Agent.Extensions;
 using Agent.Loggers;
+using Agent.Models;
+using Agent.Utilities;
 using AudDSharp;
 using DotNetEnv;
 using FluentScheduler;
 using Hanssens.Net;
-using LivePlaylistsClone.Common;
 using LivePlaylistsClone.Contracts;
 using LivePlaylistsSharp.Contracts;
 using LivePlaylistsSharp.Models;
 using Nito.AsyncEx;
 using Polly;
-using ShazamSharp;
+using Project;
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -23,242 +27,181 @@ namespace LivePlaylistsClone.Channels
 {
     public class Channel : Registry, IJob
     {
-        // music providers
-        private readonly AudDClient _auddioAPI;
-        private readonly ShazamClient _shazamAPI;
-
-        private readonly ILocalStorage _storage;
         private readonly IChannel _channel;
-        private readonly IPlaylist[] _playlists;
+        private readonly List<IPlaylistStrategy> _playlistStrategies;
+        private readonly List<ITrackStrategy> _trackStrategies;
 
-        private readonly PCManager _pcMgr;
+        private readonly CommonUtilities _commonUtilities;
+        private readonly StreamUtilities _streamUtilities;
+        private readonly TrackUtilities _trackUtilities;
 
-        private readonly string _logPath;
-        private readonly string _samplePath;
+        private int _currentStrategyIndex;
+        private int _lastStrategyIndex;
 
-        private const string LAST_TRACK_KEY = "last.track";
+        private ITrackStrategy _currentStrategy;
 
+        private readonly int _interval_seconds;
 
-        public Channel(IChannel channel, IPlaylist[] playlists)
+        public Channel(
+            IChannel channel,
+            List<ITrackStrategy> trackStrategies,
+            List<IPlaylistStrategy> playlistStrategies
+            )
         {
-            // init pcmanager
-            this._pcMgr = new PCManager(channel.Name);
-
             // inject classes
             this._channel = channel;
-            this._playlists = playlists;
+            this._trackStrategies = trackStrategies;
+            this._playlistStrategies = playlistStrategies;
 
-            // create auddio interface
-            this._auddioAPI = AudDClient
-                .Create(
-                    Env.GetString("audd_api_token")
-                )
-                .IncludeProvider(StreamProvider.Apple_Music)
-                .IncludeProvider(StreamProvider.Spotify)
-                .Build();
+            // setup fields
+            this._commonUtilities = new CommonUtilities(channel.Name);
+            this._streamUtilities = new StreamUtilities(this._commonUtilities);
+            this._trackUtilities = new TrackUtilities(this._commonUtilities);
 
-            // create shazam interface
-            this._shazamAPI = ShazamClient
-                .Create()
-                .Build();
+            // strategy index
+            this._currentStrategyIndex = 0;
+            this._lastStrategyIndex = this._trackStrategies.Count - 1;
 
-            // setup local storage
-            this._storage = new LocalStorage(
-                new LocalStorageConfiguration()
-                {
-
-                    Filename = this._pcMgr.ChannelStoragePath
-                }
+            // todo - revert back to 288 seconds?
+            this._interval_seconds = Convert.ToInt32(
+                Env.GetInt("execution_interval_sec")
             );
-
-            // prepare settings
-            this._logPath = this._pcMgr.ChannelLogsPath;
-            this._samplePath = this._pcMgr.ChannelSamplePath;
-
-            // monitor the channel every 4 minutes and 48 seconds,
-            // to reduce the api rate limit and cost to be identical to "stream" api
-            this.Schedule(this).NonReentrant().ToRunNow().AndEvery(288).Seconds();
+            this.Schedule(this).NonReentrant().ToRunNow().AndEvery(_interval_seconds).Seconds();
         }
 
         public void Execute()
         {
-            bool isSampleWritten = AsyncContext.Run(async () => await WriteChunkToFile(this._samplePath));
-
-            if (!isSampleWritten)
+            if (!AsyncContext.Run(async () =>
             {
-                // fail to write chunk to disk, so we exit and wait for next execution
+                var error = await this._streamUtilities.WriteChunkToFile(
+                    new Uri(_channel.StreamUrl),
+                    this._commonUtilities.ChannelSamplePath
+                );
 
-                return;
-            }
+                return error;
+            })) return;
 
-            var auddioFallback = Policy<IPlaylistTrack>
-                .HandleResult(track => !track.Success)
-                .Fallback(() =>
-                {
-                    // This will be executed if the shazamAPI fails
-                    Console.WriteLine("Fallback to AudD Music");
+            // todo - fuzzy algorithm-like for audio file? maybe...
 
-                    var tack = this._auddioAPI
-                        .RecognizeByFile(this._samplePath)
-                        .ToTrack();
+            this._currentStrategy = this._trackStrategies[this._currentStrategyIndex];
 
-                    // if Shazam fails, we get result from auddio
-                    return tack;
-                });
-
-            var track = auddioFallback.Execute(() =>
+            var result = AsyncContext.Run(async () =>
             {
-                // First try to recognize with shazamAPI
-                var track = Policy
-
-                    // if we didn't find a track
-                    .HandleResult<IPlaylistTrack>(track => !track.Success)
-
-                    // or if we're out of retries
-                    .OrResult(track => track.RetryTimeSpan != TimeSpan.Zero)
-
-                    // we wait until one of the above conditions is satisfied..
-                    .WaitAndRetry(
-                        retryCount: int.MaxValue, 
-                        sleepDurationProvider: (retryAttempt, track, context) => {
-
-                            // default api wait time
-                            return TimeSpan.FromSeconds(3);
-                    })
-
-                    // execute the retry policy
-                    .Execute(() => {
-                        // get track
-                        var track = this._shazamAPI
-                            .RecognizeByFile(this._samplePath)
-                            .ToTrack();
-
-                        // return
-                        return track;
-                    });
-
-                return track;
+                return await this._currentStrategy.RunAsync(
+                    this._commonUtilities.ChannelSamplePath,
+                    this.TrackDetectionSuccess,
+                    this.TrackDetectionFail
+                );
             });
 
-            if (!track.Success)
+            // invoke success/error callback
+            result.Action(result.Track);
+        }
+
+        private void TrackDetectionSuccess(IPlaylistTrack track)
+        {
+            // after a match, we must reset back to defaults
+            this.PerformStrategyRetryReset();
+            this.PerformStrategyReset();
+
+            if (this._trackUtilities.TrackExistInStorage(track))
             {
-                // print error to disk
-                this.PrintLog($"{this._channel.Name} Broadcasting right now...");
+                // print log
+                Logger.Instance.WriteLog($"{track.Title} Already exists, exiting...");
+
+                // wait a little before next execution..
+                Thread.Sleep(30 * 1000);
 
                 return;
             }
 
-            if (this.TrackExistInStorage(track))
+            foreach (IPlaylistStrategy playlistStrategy in this._playlistStrategies)
             {
-                // if the same track exists in the storage, then we exit
-                // reason: the track has been already written to spotify
+                AsyncContext.Run(async () => {
+                    await playlistStrategy.AddTrackToPlaylistAsync(track);
+                });
+            }
 
-                Thread.Sleep(30 * 1000); // todo - improve next execution logic, reduce rate limit
+            // commit track to storage 
+            this._trackUtilities.CommitTrackDisk(track);
+
+            var trackSb = new StringBuilder();
+            trackSb.AppendLine(this._channel.Name);
+            trackSb.AppendLine(track.ToString());
+
+            Logger.Instance.WriteLog(trackSb.ToString());
+
+            // Smart mechanism to reduce api calls to reduce costs
+            if (track.SmartWaitEnabled)
+            {
+                var tsGapTillEnd = track.GetGapBetweenOffsetToEnd();
+
+                if (tsGapTillEnd.Ticks > 0)
+                {
+                    var endSb = $"Next execution in... {tsGapTillEnd:mm\\:ss} minutes..";
+                    Logger.Instance.WriteLog(endSb.ToString());
+
+                    Thread.Sleep(tsGapTillEnd);
+                }
+            }
+        }
+
+        private bool LastStrategyReached => 
+            this._currentStrategyIndex == this._lastStrategyIndex;
+
+        private bool StrategyOutOfRetries =>
+            this._currentStrategy.RetryCount-- == 0;
+
+        private void PerformStrategyReset()
+        {
+            // reset back to first strategy
+            this._currentStrategyIndex = 0;
+
+            // print log
+            Logger.Instance.WriteLog($"{this._channel.Name} strategy reset to {this._currentStrategyIndex}..");
+        }
+
+        private void PerformStrategyRetryReset()
+        {
+            // reset current strategy retry count
+            this._currentStrategy.ResetRetryCount();
+        }
+
+        private void PerformMoveNextStrategy()
+        {
+            // promote current strategy to next one
+            this._currentStrategyIndex++;
+
+            // print log
+            var sb = new StringBuilder();
+            sb.Append($"{this._channel.Name} - {this._currentStrategy} Couldn't find the track.., ");
+            sb.Append("shifting next strategy {this._currentStrategyIndex}...");
+
+            Logger.Instance.WriteLog(sb.ToString());
+        }
+
+        private void TrackDetectionFail(IPlaylistTrack track)
+        {
+            // are we out of retries? reset and move next strategy..
+            if (this.StrategyOutOfRetries)
+            {
+                this.PerformStrategyRetryReset();
+
+                // did we reach the last strategy?
+                if (this.LastStrategyReached)
+                {
+                    this.PerformStrategyReset();
+
+                    return;
+                }
+
+                this.PerformMoveNextStrategy();
 
                 return;
             }
 
-            foreach (IPlaylist playlist in this._playlists)
-            {
-                AsyncContext.Run(async () => await playlist.AddTrackToPlaylistAsync(track));
-            }
-
-            // save to database
-            this._storage.Store(LAST_TRACK_KEY, track);
-            this._storage.Persist();
-
-            var printTrack = new StringBuilder();
-            printTrack.AppendLine(this._channel.Name);
-            printTrack.AppendLine(track.ToString());
-
-            // print track to console
-            this.PrintLog(printTrack);
-
-            // print track to file
-            this.WriteLog(printTrack);
-
-            // Mechanism to wait the leftover in order to prevent
-            // the detection of the same song in different offset
-            // and a redundant call to the recognition api (reduce cost)
-            var tsEndGap = this.GetTrackTimeEndGap(track);
-
-            if (tsEndGap.Ticks > 0)
-            {
-                var printMe = $"Next execution in... {tsEndGap.ToString("mm\\:ss")} minutes..";
-
-                this.PrintLog(printMe);
-
-                Thread.Sleep(tsEndGap);
-            }
-        }
-
-        private bool TrackExistInStorage(IPlaylistTrack track)
-        {
-            if (this._storage.Exists(LAST_TRACK_KEY))
-            {
-                var cache_track = this._storage.Get<IPlaylistTrack>(LAST_TRACK_KEY);
-
-                return track.Equals(cache_track);
-            }
-
-            return false;
-        }
-
-        private TimeSpan GetTrackTimeEndGap(IPlaylistTrack track)
-        {
-            if (track.TotalTime == TimeSpan.Zero)
-            {
-                return TimeSpan
-                    .FromMilliseconds(210000)
-                    .Subtract(track.OffsetTime);
-            }
-
-            return track.TotalTime.Subtract(track.OffsetTime);
-        }
-
-        private void WriteLog(string message)
-        {
-            System.IO.File.AppendAllText(this._logPath, message);
-        }
-
-        private void WriteLog(StringBuilder sb)
-        {
-            this.WriteLog(sb.ToString());
-        }
-
-        private void PrintLog(string message)
-        {
-            Console.WriteLine(message);
-        }
-
-        private void PrintLog(StringBuilder sb)
-        {
-            this.PrintLog(sb.ToString());
-        }
-
-        // This method saves a 128KB chunk of the steam to a local file
-        private async Task<bool> WriteChunkToFile(string fileName)
-        {
-            try
-            {
-                using var http = new HttpClient();
-                using var stream = await http.GetStreamAsync(new Uri(_channel.StreamUrl));
-                using var fileStream = new FileStream(fileName, FileMode.Create, FileAccess.Write);
-
-                byte[] buffer = new byte[128000];
-
-                // 128KB is enough to sample, 0:08 seconds length
-                await stream.ReadExactlyAsync(buffer, 0, buffer.Length);
-                await fileStream.WriteAsync(buffer);
-            }
-            catch (Exception ex)
-            {
-                File.AppendAllText(this._logPath, ex.ToString());
-
-                return false;
-            }
-
-            return true;
+            // print log
+            Logger.Instance.WriteLog($"{this._channel.Name} Couldn't find track, going to retry again in {this._interval_seconds} seconds...");
         }
     }
 }

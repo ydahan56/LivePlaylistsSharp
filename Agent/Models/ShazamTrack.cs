@@ -1,5 +1,6 @@
-﻿using LivePlaylistsSharp.Contracts;
-using ShazamSharp.Models;
+﻿using Hanssens.Net;
+using LivePlaylistsSharp.Contracts;
+using Project;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,16 +12,6 @@ namespace Agent.Models
 {
     public class ShazamTrack : IPlaylistTrack
     {
-        public string Title { get; private set; }
-        public string Artist { get; private set; }
-        public string ProviderUri { get; private set; }
-        public TimeSpan TotalTime { get; private set; }
-        public TimeSpan OffsetTime { get; private set; }
-
-        public bool Success { get; private set; }
-
-        public TimeSpan RetryTimeSpan { get; private set; }
-
         public ShazamTrack()
         {
             
@@ -28,42 +19,33 @@ namespace Agent.Models
 
         public ShazamTrack(ShazamResult result)
         {
-            // the offset check is to determine if we have a track matched
-            // the match could be non-null, but who knows what to expect
-            this.Success = result.matches != null;
+            this.Success = result == null ? false : result.Success;
 
             if (!Success)
             {
-                // we're going to try again.. until no more needed
-                this.RetryTimeSpan = TimeSpan.FromMilliseconds(result.retry);
+                this.RetryTimeSpan = result == null ? 
+                    TimeSpan.Zero : 
+                    TimeSpan.FromMilliseconds(result.RetryMs);
 
                 return;
             }
 
-            // we only have a single match
-            var match = result.matches.FirstOrDefault();
+            this.Title = result.Title;
+            this.Artist = result.Artist;
+            this.SpotifyUri = "";
 
-            this.Title = match.metadata.title;
-            this.Artist = match.metadata.artist;
-            // this.ProviderUri = match.key; 
-            this.ProviderUri = "";
+            this.TotalTime = TimeSpan.FromSeconds(result.DurationSec);
+            this.OffsetTime = TimeSpan.FromSeconds(result.MatchOffsetSec);
 
-            this.TotalTime = this.GetTrackLength(result);
-            this.OffsetTime = TimeSpan.FromMilliseconds(match.offset);
+            this.SmartWaitEnabled = true;
         }
 
-        private TimeSpan GetTrackLength(ShazamResult result)
+        public override IPlaylistTrack GetStorageTrack(
+            ILocalStorage storage, 
+            string itemKey
+            )
         {
-            var match = Regex.Match(result.matches[0].weburl, "trackLength=(?<length>\\d)");
-
-            if (match.Success)
-            {
-                var tracklen = Convert.ToInt32(match.Groups["trackLength"].Value);
-
-                return TimeSpan.FromMilliseconds(tracklen);
-            }
-
-            return TimeSpan.Zero;
+            return storage.Get<ShazamTrack>(itemKey);
         }
     }
 }
