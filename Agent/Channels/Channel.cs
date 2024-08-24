@@ -36,7 +36,7 @@ namespace LivePlaylistsClone.Channels
         private readonly TrackUtilities _trackUtilities;
 
         private int _currentStrategyIndex;
-        private int _lastStrategyIndex;
+        private int _strategiesCount;
 
         private ITrackStrategy _currentStrategy;
 
@@ -60,7 +60,7 @@ namespace LivePlaylistsClone.Channels
 
             // strategy index
             this._currentStrategyIndex = 0;
-            this._lastStrategyIndex = this._trackStrategies.Count - 1;
+            this._strategiesCount = this._trackStrategies.Count - 1;
 
             // todo - revert back to 288 seconds?
             this._interval_seconds = Convert.ToInt32(
@@ -132,22 +132,28 @@ namespace LivePlaylistsClone.Channels
             Logger.Instance.WriteLog(trackSb.ToString());
 
             // Smart mechanism to reduce api calls to reduce costs
-            if (track.SmartWaitEnabled)
+            if (track.IdleEnabled)
             {
-                var tsGapTillEnd = track.GetGapBetweenOffsetToEnd();
+                this.IdleSpin(track);
+            }
+        }
 
-                if (tsGapTillEnd.Ticks > 0)
-                {
-                    var endSb = $"Next execution in... {tsGapTillEnd:mm\\:ss} minutes..";
-                    Logger.Instance.WriteLog(endSb.ToString());
+        private void IdleSpin(IPlaylistTrack track)
+        {
+            var ts = track.GetGapBetweenOffsetToEnd();
 
-                    Thread.Sleep(tsGapTillEnd);
-                }
+            if (ts.Ticks > 0)
+            {
+                var endSb = $"Next execution in... {ts:mm\\:ss} minutes..";
+                Logger.Instance.WriteLog(endSb.ToString());
+
+                // suspend thread
+                Thread.Sleep(ts);
             }
         }
 
         private bool LastStrategyReached => 
-            this._currentStrategyIndex == this._lastStrategyIndex;
+            this._currentStrategyIndex == this._strategiesCount;
 
         private bool StrategyOutOfRetries =>
             this._currentStrategy.RetryCount-- == 0;
@@ -158,7 +164,7 @@ namespace LivePlaylistsClone.Channels
             this._currentStrategyIndex = 0;
 
             // print log
-            Logger.Instance.WriteLog($"{this._channel.Name} strategy reset to {this._currentStrategyIndex}..");
+            Logger.Instance.WriteLog($"{this._channel.Name} - {this._currentStrategy.Name} Reset (Index: {this._currentStrategyIndex})..");
         }
 
         private void PerformStrategyRetryReset()
@@ -174,8 +180,8 @@ namespace LivePlaylistsClone.Channels
 
             // print log
             var sb = new StringBuilder();
-            sb.Append($"{this._channel.Name} - {this._currentStrategy} Couldn't find the track.., ");
-            sb.Append("shifting next strategy {this._currentStrategyIndex}...");
+            sb.AppendLine($"{this._channel.Name} - {this._currentStrategy.Name} Couldn't find the track..");
+            sb.AppendLine($"Shifting Strategy to {this._currentStrategyIndex}...");
 
             Logger.Instance.WriteLog(sb.ToString());
         }
@@ -201,7 +207,7 @@ namespace LivePlaylistsClone.Channels
             }
 
             // print log
-            Logger.Instance.WriteLog($"{this._channel.Name} Couldn't find track, going to retry again in {this._interval_seconds} seconds...");
+            Logger.Instance.WriteLog($"{this._channel.Name} Couldn't find track, retrying again in {this._interval_seconds} seconds...");
         }
     }
 }

@@ -24,12 +24,22 @@ JobManager.Initialize(
 #elif RELEASE
 JobManager.Initialize(
     new Channel(
-        new GlglzChannel(), [
+        new GlglzChannel(), 
+        [
+            new ShazamStrategy(),
+            new AudDStrategy()
+        ], 
+        [
             new SpotifyPlaylist("5mLHWcR8C3ObKYdKxTyzyY")
         ]
     ),
     new Channel(
-        new Kan88Channel(), [
+        new Kan88Channel(), 
+        [
+            new ShazamStrategy(),
+            new AudDStrategy()
+        ], 
+        [
             new SpotifyPlaylist("3SpUq03whlfRMwEHMRulNy")
         ]
     )

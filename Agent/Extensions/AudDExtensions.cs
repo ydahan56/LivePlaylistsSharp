@@ -12,7 +12,7 @@ namespace Agent.Extensions
     {
         public static AudDTrack ToTrack(this AudDResult result)
         {
-            return new AudDTrack(result);
+            return AudDTrack.Create(result);
         }
     }
 }

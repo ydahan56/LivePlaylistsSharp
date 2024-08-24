@@ -12,7 +12,7 @@ namespace Agent.Extensions
     {
         public static ShazamTrack ToTrack(this ShazamResult result)
         {
-            return new ShazamTrack(result);
+            return ShazamTrack.Create(result);
         }
     }
 }

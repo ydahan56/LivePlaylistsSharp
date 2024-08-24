@@ -1,4 +1,5 @@
-﻿using Hanssens.Net;
+﻿using Agent.Models;
+using Hanssens.Net;
 using LivePlaylistsSharp.Contracts;
 using System;
 using System.Collections.Generic;

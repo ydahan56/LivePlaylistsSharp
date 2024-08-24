@@ -15,7 +15,12 @@ namespace LivePlaylistsSharp.Models
             
         }
 
-        public AudDTrack(AudDResult result)
+        public static AudDTrack Create(AudDResult result)
+        {
+            return new AudDTrack(result);
+        }
+
+        private AudDTrack(AudDResult result)
         {
             this.Success = result == null ? false : result.status.Contains("success");
 
@@ -26,6 +31,7 @@ namespace LivePlaylistsSharp.Models
                 return;
             }
 
+            this.ID = result.result.spotify.id;
             this.Title = result.result.title;
             this.Artist = result.result.artist;
             this.SpotifyUri = result.result.spotify?.uri;
@@ -41,7 +47,7 @@ namespace LivePlaylistsSharp.Models
                 CultureInfo.InvariantCulture
             );
 
-            this.SmartWaitEnabled = true;
+            this.IdleEnabled = true;
         }
 
         public override IPlaylistTrack GetStorageTrack(

@@ -6,15 +6,16 @@ namespace LivePlaylistsSharp.Contracts
 {
     public abstract class IPlaylistTrack : IEquatable<IPlaylistTrack>
     {
-        public string Title { get; protected set; }
-        public string Artist { get; protected set; }
-        public string SpotifyUri { get; protected set; }
-        public TimeSpan TotalTime { get; protected set; }
-        public TimeSpan OffsetTime { get; protected set; }
+        public string ID { get; set; }
+        public string Title { get; set; }
+        public string Artist { get; set; }
+        public string SpotifyUri { get; set; }
+        public TimeSpan TotalTime { get; set; }
+        public TimeSpan OffsetTime { get; set; }
 
-        public bool Success { get; protected set; }
-        public bool SmartWaitEnabled { get; protected set; }
-        public TimeSpan RetryTimeSpan { get; protected set; }
+        public bool Success { get; set; }
+        public bool IdleEnabled { get; set; }
+        public TimeSpan RetryTimeSpan { get; set; }
 
 
         public override string ToString()
@@ -28,6 +29,11 @@ namespace LivePlaylistsSharp.Contracts
             return sb.ToString();
         }
 
+        public bool Equals(IPlaylistTrack other)
+        {
+            return this.ID.Equals(other.ID);
+        }
+
         public TimeSpan GetGapBetweenOffsetToEnd()
         {
             if (this.TotalTime == TimeSpan.Zero)
@@ -38,11 +44,6 @@ namespace LivePlaylistsSharp.Contracts
             }
 
             return this.TotalTime.Subtract(this.OffsetTime);
-        }
-
-        public bool Equals(IPlaylistTrack other)
-        {
-            return this.SpotifyUri.Equals(other.SpotifyUri);
         }
 
         public abstract IPlaylistTrack GetStorageTrack(

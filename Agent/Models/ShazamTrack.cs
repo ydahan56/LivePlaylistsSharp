@@ -17,7 +17,12 @@ namespace Agent.Models
             
         }
 
-        public ShazamTrack(ShazamResult result)
+        public static ShazamTrack Create(ShazamResult result)
+        {
+            return new ShazamTrack(result);
+        }
+
+        private ShazamTrack(ShazamResult result)
         {
             this.Success = result == null ? false : result.Success;
 
@@ -30,6 +35,7 @@ namespace Agent.Models
                 return;
             }
 
+            this.ID = result.ID;
             this.Title = result.Title;
             this.Artist = result.Artist;
             this.SpotifyUri = "";
@@ -37,11 +43,11 @@ namespace Agent.Models
             this.TotalTime = TimeSpan.FromSeconds(result.DurationSec);
             this.OffsetTime = TimeSpan.FromSeconds(result.MatchOffsetSec);
 
-            this.SmartWaitEnabled = true;
+            this.IdleEnabled = true;
         }
 
         public override IPlaylistTrack GetStorageTrack(
-            ILocalStorage storage, 
+            ILocalStorage storage,
             string itemKey
             )
         {
