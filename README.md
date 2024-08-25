@@ -1,5 +1,5 @@
 # LivePlaylistsSharp
-This is an open-source clone in C# of the [LivePlaylists](https://www.facebook.com/LivePlaylists) project by [Yaniv Lerman](https://www.facebook.com/yaniv.lerman). This project was written for my own personal educational purpose only, I was bored so decided to write my own version of this cute little app.
+This is an open-source clone in C# influenced by the [LivePlaylists](https://www.facebook.com/LivePlaylists) project by [Yaniv Lerman](https://www.facebook.com/yaniv.lerman). This is not a replacement of the original work; it's a side project I opened source to let streamers continue enjoy the service and encourage other curious developers to observe the code and learn from it, and perhaps influence others to pull off their own variation of the project.
 
 # How it works?
 The program monitors the channel every 30 seconds, it saves an 8 second chunk (128KB in size) of the stream and uploads it to the [AudD.io API](https://docs.audd.io/#recognize) for recognition. If no song was recognized (due to a broadcast), then the method returns without doing nothing and waits for next execution.
