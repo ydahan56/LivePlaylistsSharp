@@ -18,7 +18,7 @@ namespace Agent.Utilities
             this._commonUtilities = commonUtilities;
         }
 
-        public async Task<bool> WriteChunkToFile(Uri uri, string fileName)
+        public async Task<bool> WriteChunkToFileAsync(Uri uri, string fileName)
         {
             try
             {

@@ -19,11 +19,7 @@ namespace Agent.Strategies
         {
             this.Name = "Shazam";
             this.RetryCount = DEFAULT_RETRY_COUNT;
-        }
-
-        public override void ResetRetryCount()
-        {
-            this.RetryCount = DEFAULT_RETRY_COUNT;
+            this.RetryCounter = DEFAULT_RETRY_COUNT;
         }
 
         public override async Task<StrategyResult> RunAsync(

@@ -11,7 +11,7 @@ Env.Load();
 #if DEBUG
 JobManager.Initialize(
     new Channel(
-        new GlglzChannel(), 
+        new Kan88Channel(), 
         [
             new ShazamStrategy(),
             new AudDStrategy()

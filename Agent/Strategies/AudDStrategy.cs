@@ -21,6 +21,7 @@ namespace Agent.Strategies
         {
             this.Name = "AudD Music";
             this.RetryCount = DEFAULT_RETRY_COUNT;
+            this.RetryCounter = DEFAULT_RETRY_COUNT;
 
             this._auddio = AudDClient
                 .Create(
@@ -29,11 +30,6 @@ namespace Agent.Strategies
                 .IncludeProvider(StreamProvider.Apple_Music)
                 .IncludeProvider(StreamProvider.Spotify)
                 .Build();
-        }
-
-        public override void ResetRetryCount()
-        {
-            this.RetryCount = DEFAULT_RETRY_COUNT;
         }
 
         public override async Task<StrategyResult> RunAsync(

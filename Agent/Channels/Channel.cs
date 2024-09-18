@@ -33,13 +33,18 @@ namespace LivePlaylistsClone.Channels
 
         private readonly CommonUtilities _commonUtilities;
         private readonly StreamUtilities _streamUtilities;
-        private readonly TrackUtilities _trackUtilities;
+        private readonly StorageUtilities _storageUtilities;
 
-        private int _currentStrategyIndex;
-        private int _strategiesCount;
+        // Current index of selected strategy
+        private int CurrentStrategyIndex;
 
-        private ITrackStrategy _currentStrategy;
+        // Total amount of strategies available
+        private int TotalStrategiesCount;
 
+        // Current strategy implementation
+        private ITrackStrategy CurrentStrategy;
+        
+        // execution delay in seconds
         private readonly int _interval_seconds;
 
         public Channel(
@@ -56,16 +61,22 @@ namespace LivePlaylistsClone.Channels
             // setup fields
             this._commonUtilities = new CommonUtilities(channel.Name);
             this._streamUtilities = new StreamUtilities(this._commonUtilities);
-            this._trackUtilities = new TrackUtilities(this._commonUtilities);
+            this._storageUtilities = new StorageUtilities(this._commonUtilities);
 
             // strategy index
-            this._currentStrategyIndex = 0;
-            this._strategiesCount = this._trackStrategies.Count - 1;
+            this._storageUtilities.TryGetLastStrategyIndex(
+                out this.CurrentStrategyIndex
+            );
+
+            // todo - trygetlastretrycount
+
+            this.TotalStrategiesCount = this._trackStrategies.Count - 1;
 
             // todo - revert back to 288 seconds?
             this._interval_seconds = Convert.ToInt32(
                 Env.GetInt("execution_interval_sec")
             );
+
             this.Schedule(this).NonReentrant().ToRunNow().AndEvery(_interval_seconds).Seconds();
         }
 
@@ -73,7 +84,7 @@ namespace LivePlaylistsClone.Channels
         {
             if (!AsyncContext.Run(async () =>
             {
-                var error = await this._streamUtilities.WriteChunkToFile(
+                var error = await this._streamUtilities.WriteChunkToFileAsync(
                     new Uri(_channel.StreamUrl),
                     this._commonUtilities.ChannelSamplePath
                 );
@@ -81,13 +92,13 @@ namespace LivePlaylistsClone.Channels
                 return error;
             })) return;
 
-            // todo - fuzzy algorithm-like for audio file? maybe...
+            // todo - fuzzy-like algorithm for audio file? maybe...
 
-            this._currentStrategy = this._trackStrategies[this._currentStrategyIndex];
+            this.CurrentStrategy = this._trackStrategies[this.CurrentStrategyIndex];
 
             var result = AsyncContext.Run(async () =>
             {
-                return await this._currentStrategy.RunAsync(
+                return await this.CurrentStrategy.RunAsync(
                     this._commonUtilities.ChannelSamplePath,
                     this.TrackDetectionSuccess,
                     this.TrackDetectionFail
@@ -104,10 +115,10 @@ namespace LivePlaylistsClone.Channels
             this.PerformStrategyRetryReset();
             this.PerformStrategyReset();
 
-            if (this._trackUtilities.TrackExistInStorage(track))
+            if (this._storageUtilities.StorageTrackEquals(track))
             {
                 // print log
-                Logger.Instance.WriteLog($"{track.Title} Already exists, exiting...");
+                Logger.Instance.WriteLog($"{this._channel.Name} - {track.Title} Already exists, exiting...");
 
                 // wait a little before next execution..
                 Thread.Sleep(30 * 1000);
@@ -123,7 +134,7 @@ namespace LivePlaylistsClone.Channels
             }
 
             // commit track to storage 
-            this._trackUtilities.CommitTrackDisk(track);
+            this._storageUtilities.CommitTrackDisk(track);
 
             var trackSb = new StringBuilder();
             trackSb.AppendLine(this._channel.Name);
@@ -134,11 +145,11 @@ namespace LivePlaylistsClone.Channels
             // Smart mechanism to reduce api calls to reduce costs
             if (track.IdleEnabled)
             {
-                this.IdleSpin(track);
+                this.SpinIdle(track);
             }
         }
 
-        private void IdleSpin(IPlaylistTrack track)
+        private void SpinIdle(IPlaylistTrack track)
         {
             var ts = track.GetGapBetweenOffsetToEnd();
 
@@ -153,35 +164,32 @@ namespace LivePlaylistsClone.Channels
         }
 
         private bool LastStrategyReached => 
-            this._currentStrategyIndex == this._strategiesCount;
-
-        private bool StrategyOutOfRetries =>
-            this._currentStrategy.RetryCount-- == 0;
+            this.CurrentStrategyIndex == this.TotalStrategiesCount;
 
         private void PerformStrategyReset()
         {
             // reset back to first strategy
-            this._currentStrategyIndex = 0;
+            this.CurrentStrategyIndex = 0;
 
             // print log
-            Logger.Instance.WriteLog($"{this._channel.Name} - {this._currentStrategy.Name} Reset (Index: {this._currentStrategyIndex})..");
+            Logger.Instance.WriteLog($"{this._channel.Name} - {this.CurrentStrategy.Name} Reset ( Index: {this.CurrentStrategyIndex} )..");
         }
 
         private void PerformStrategyRetryReset()
         {
             // reset current strategy retry count
-            this._currentStrategy.ResetRetryCount();
+            this.CurrentStrategy.ResetCounter();
         }
 
         private void PerformMoveNextStrategy()
         {
             // promote current strategy to next one
-            this._currentStrategyIndex++;
+            this.CurrentStrategyIndex++;
 
             // print log
             var sb = new StringBuilder();
-            sb.AppendLine($"{this._channel.Name} - {this._currentStrategy.Name} Couldn't find the track..");
-            sb.AppendLine($"Shifting Strategy to {this._currentStrategyIndex}...");
+            sb.AppendLine($"{this._channel.Name} - {this.CurrentStrategy.Name} Couldn't find the track..");
+            sb.AppendLine($"Shifting next Strategy... ( Index: {this.CurrentStrategyIndex} )");
 
             Logger.Instance.WriteLog(sb.ToString());
         }
@@ -189,9 +197,10 @@ namespace LivePlaylistsClone.Channels
         private void TrackDetectionFail(IPlaylistTrack track)
         {
             // are we out of retries? reset and move next strategy..
-            if (this.StrategyOutOfRetries)
+            if (!this.CurrentStrategy.HasRetries())
             {
-                this.PerformStrategyRetryReset();
+                // the strategy will reset its counter when returning false;
+                // ...
 
                 // did we reach the last strategy?
                 if (this.LastStrategyReached)

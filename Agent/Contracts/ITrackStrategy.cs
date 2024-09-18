@@ -12,9 +12,35 @@ namespace Agent.Contracts
     public abstract class ITrackStrategy
     {
         public string Name { get; protected set; }
-        public int RetryCount { get; set; }
 
-        public abstract void ResetRetryCount();
+        // contains the total amount of retries
+        protected int RetryCount;
+
+        // keeps track of retries left
+        protected int RetryCounter;
+
+        // when this returns false, we move to the next strategy in the iterator
+        public bool HasRetries()
+        {
+            var result = this.RetryCounter-- > 0;
+
+            if (!result)
+            {
+                this.ResetCounter();
+            }
+
+            return result;
+        }
+
+        public void ResetCounter()
+        {
+            this.RetryCounter = this.RetryCount;
+        }
+
+        public void SetCounter(int value)
+        {
+            this.RetryCounter = value;
+        }
 
         public abstract Task<StrategyResult> RunAsync(
             string filePath,
